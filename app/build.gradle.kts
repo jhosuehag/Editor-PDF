@@ -68,6 +68,9 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
     
+    // Gson para serialización JSON
+    implementation(libs.gson)
+    
     // UI Extras
     implementation(libs.androidx.compose.ui.google.fonts)
 

@@ -1,5 +1,6 @@
 package com.jhosue.editorpdf.ui.navigation
 
+import android.net.Uri
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
@@ -7,10 +8,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.animation.*
-import androidx.navigation.NamedNavArgument
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import androidx.compose.animation.core.tween
 import com.jhosue.editorpdf.ui.screens.DividirPdfScreen
 import com.jhosue.editorpdf.ui.screens.EditorScreen
@@ -27,10 +29,18 @@ object Routes {
     const val SPLASH = "splash"
     const val HOME = "home"
     const val EDITOR = "editor"
+    const val EDITOR_URI_ARG = "pdfUri"
     const val FIRMA = "firma"
     const val UNIR_PDF = "unir_pdf"
     const val DIVIDIR_PDF = "dividir_pdf"
     const val IMAGENES_PDF = "imagenes_pdf"
+
+    /**
+     * Construye la ruta del editor con el argumento de URI del PDF.
+     * @param uri URI codificada del PDF.
+     * @return Ruta completa para navegar al editor.
+     */
+    fun editorRoute(uri: Uri): String = "$EDITOR?$EDITOR_URI_ARG=${Uri.encode(uri.toString())}"
 }
 
 /**
@@ -63,18 +73,37 @@ fun NavGraph(navController: NavHostController) {
         }
 
         // Editor
-        composable(Routes.EDITOR) {
+        composable(
+            route = Routes.EDITOR + "?{pdfUri}",
+            arguments = listOf(
+                navArgument("pdfUri") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val pdfUriString = backStackEntry.arguments?.getString("pdfUri")
+            val pdfUri = pdfUriString?.let { Uri.parse(Uri.decode(it)) }
+
             EditorScreen(
+                pdfUri = pdfUri,
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToFirma = { navController.navigate(Routes.FIRMA) }
+                onNavigateToFirma = { navController.navigate(Routes.FIRMA) },
+                savedStateHandle = backStackEntry.savedStateHandle
             )
         }
 
         // Firma
         composable(Routes.FIRMA) {
-            FirmaScreen(onNavigateBack = {
-                navController.popBackStack()
-            })
+            FirmaScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onInsertarFirma = { firmaId ->
+                    navController.previousBackStackEntry?.savedStateHandle?.set("firmaId", firmaId)
+                }
+            )
         }
 
         // Unir PDF

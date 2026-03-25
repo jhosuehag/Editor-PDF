@@ -1,6 +1,5 @@
 package com.jhosue.editorpdf.ui.components
 
-import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,8 +14,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+
+/**
+ * Callbacks para las operaciones de guardado.
+ */
+data class GuardarCallbacks(
+    val onGuardar: () -> Unit,
+    val onGuardarComo: (String) -> Unit
+)
 
 /**
  * BottomSheet para opciones de guardado del documento.
@@ -24,9 +30,9 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BottomSheetGuardar(
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    callbacks: GuardarCallbacks
 ) {
-    val context = LocalContext.current
     var mostrarGuardarComo by remember { mutableStateOf(false) }
     var nombreTexto by remember { mutableStateOf("") }
 
@@ -59,7 +65,7 @@ fun BottomSheetGuardar(
             // Opción: Guardar (Sobreescribir)
             ListItem(
                 modifier = Modifier.clickable { 
-                    Toast.makeText(context, "Guardando...", Toast.LENGTH_SHORT).show() 
+                    callbacks.onGuardar()
                     onDismiss()
                 },
                 leadingContent = { Icon(Icons.Default.Save, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
@@ -99,17 +105,21 @@ fun BottomSheetGuardar(
                         label = { Text("Nombre del archivo") },
                         modifier = Modifier.fillMaxWidth(),
                         trailingIcon = { Text(".pdf", modifier = Modifier.padding(end = 8.dp)) },
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        singleLine = true
                     )
                     Button(
                         onClick = { 
-                            Toast.makeText(context, "Guardando copia...", Toast.LENGTH_SHORT).show() 
-                            onDismiss()
+                            if (nombreTexto.isNotBlank()) {
+                                callbacks.onGuardarComo(nombreTexto.trim())
+                                onDismiss()
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 8.dp),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(10.dp),
+                        enabled = nombreTexto.isNotBlank()
                     ) {
                         Text("Guardar copia")
                     }

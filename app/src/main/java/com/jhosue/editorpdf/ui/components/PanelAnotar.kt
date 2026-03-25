@@ -23,12 +23,26 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jhosue.editorpdf.data.models.ShapeType
+
+/**
+ * Callbacks para las acciones de anotación.
+ */
+data class AnnotationCallbacks(
+    val onToolSelected: (String?) -> Unit,
+    val onColorSelected: (Int) -> Unit,
+    val onThicknessSelected: (Float) -> Unit,
+    val onShapeSelected: (ShapeType) -> Unit
+)
 
 /**
  * Panel de herramientas de anotación para el editor de PDF.
  */
 @Composable
-fun PanelAnotar(onNavigateToFirma: () -> Unit) {
+fun PanelAnotar(
+    onNavigateToFirma: () -> Unit,
+    callbacks: AnnotationCallbacks
+) {
     var activeToolIndex by remember { mutableStateOf<Int?>(null) }
     
     Column(
@@ -46,14 +60,14 @@ fun PanelAnotar(onNavigateToFirma: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             val tools = listOf(
-                AnnotationTool("Resaltar", Icons.Default.Highlight),
-                AnnotationTool("Subrayar", Icons.Default.FormatUnderlined),
-                AnnotationTool("Tachar", Icons.Default.FormatStrikethrough),
-                AnnotationTool("Dibujo", Icons.Default.Brush),
-                AnnotationTool("Texto", Icons.Default.TextFields),
-                AnnotationTool("Nota", Icons.Default.StickyNote2),
-                AnnotationTool("Formas", Icons.Default.Category),
-                AnnotationTool("Firma", Icons.Default.HistoryEdu)
+                AnnotationTool("Resaltar", Icons.Default.Highlight, "RESALTAR"),
+                AnnotationTool("Subrayar", Icons.Default.FormatUnderlined, "SUBRAYAR"),
+                AnnotationTool("Tachar", Icons.Default.FormatStrikethrough, "TACHAR"),
+                AnnotationTool("Dibujo", Icons.Default.Brush, "DIBUJO"),
+                AnnotationTool("Texto", Icons.Default.TextFields, "TEXTO_LIBRE"),
+                AnnotationTool("Nota", Icons.Default.StickyNote2, "NOTA"),
+                AnnotationTool("Formas", Icons.Default.Category, "FORMA"),
+                AnnotationTool("Firma", Icons.Default.HistoryEdu, "FIRMA")
             )
 
             tools.forEachIndexed { index, tool ->
@@ -62,6 +76,7 @@ fun PanelAnotar(onNavigateToFirma: () -> Unit) {
                     isActive = activeToolIndex == index,
                     onClick = {
                         activeToolIndex = if (activeToolIndex == index) null else index
+                        callbacks.onToolSelected(if (activeToolIndex == index) tool.toolName else null)
                     }
                 )
             }
@@ -80,12 +95,12 @@ fun PanelAnotar(onNavigateToFirma: () -> Unit) {
                     .padding(12.dp)
             ) {
                 when (activeToolIndex) {
-                    0 -> SubPanelResaltar()
-                    1, 2 -> SubPanelSubrayarTachar()
-                    3 -> SubPanelDibujo()
+                    0 -> SubPanelResaltar(callbacks.onColorSelected)
+                    1, 2 -> SubPanelSubrayarTachar(callbacks.onColorSelected)
+                    3 -> SubPanelDibujo(callbacks.onColorSelected, callbacks.onThicknessSelected)
                     4 -> SubPanelTextoNota("Toca el documento para posicionar el texto")
                     5 -> SubPanelTextoNota("Toca donde quieres colocar la nota")
-                    6 -> SubPanelFormas()
+                    6 -> SubPanelFormas(callbacks.onShapeSelected, callbacks.onColorSelected)
                     7 -> SubPanelFirma(onNavigateToFirma)
                 }
             }
@@ -93,7 +108,11 @@ fun PanelAnotar(onNavigateToFirma: () -> Unit) {
     }
 }
 
-data class AnnotationTool(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
+data class AnnotationTool(
+    val label: String, 
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val toolName: String
+)
 
 @Composable
 fun ToolItem(tool: AnnotationTool, isActive: Boolean, onClick: () -> Unit) {
@@ -127,15 +146,15 @@ fun ToolItem(tool: AnnotationTool, isActive: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-fun SubPanelResaltar() {
+fun SubPanelResaltar(onColorSelected: (Int) -> Unit) {
     var selectedColor by remember { mutableStateOf(0) }
     val colors = listOf(
-        Color(0xFFFFE066), // Amarillo
-        Color(0xFF86EFAC), // Verde
-        Color(0xFF93C5FD), // Azul
-        Color(0xFFFDA4AF), // Rosa
-        Color(0xFFFCA5A1), // Naranja
-        Color(0xFFC4B5FD)  // Lavanda
+        0xFFFFE066.toInt(), // Amarillo
+        0xFF86EFAC.toInt(), // Verde
+        0xFF93C5FD.toInt(), // Azul
+        0xFFFDA4AF.toInt(), // Rosa
+        0xFFFCA5A1.toInt(), // Naranja
+        0xFFC4B5FD.toInt()  // Lavanda
     )
 
     Row(
@@ -143,11 +162,14 @@ fun SubPanelResaltar() {
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        colors.forEachIndexed { index, color ->
+        colors.forEachIndexed { index, colorInt ->
             ColorCircle(
-                color = color,
+                color = Color(colorInt),
                 isSelected = selectedColor == index,
-                onClick = { selectedColor = index },
+                onClick = { 
+                    selectedColor = index
+                    onColorSelected(colorInt)
+                },
                 size = 32.dp
             )
         }
@@ -155,13 +177,13 @@ fun SubPanelResaltar() {
 }
 
 @Composable
-fun SubPanelSubrayarTachar() {
+fun SubPanelSubrayarTachar(onColorSelected: (Int) -> Unit) {
     var selectedColor by remember { mutableStateOf(0) }
     val colors = listOf(
-        Color(0xFF1E293B), // Negro azulado
-        Color(0xFFEF4444), // Rojo
-        Color(0xFF3B82F6), // Azul
-        Color(0xFF22C55E)  // Verde
+        0xFF1E293B.toInt(), // Negro azulado
+        0xFFEF4444.toInt(), // Rojo
+        0xFF3B82F6.toInt(), // Azul
+        0xFF22C55E.toInt()  // Verde
     )
 
     Row(
@@ -169,11 +191,14 @@ fun SubPanelSubrayarTachar() {
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("Color:", style = MaterialTheme.typography.labelMedium)
-        colors.forEachIndexed { index, color ->
+        colors.forEachIndexed { index, colorInt ->
             ColorCircle(
-                color = color,
+                color = Color(colorInt),
                 isSelected = selectedColor == index,
-                onClick = { selectedColor = index },
+                onClick = { 
+                    selectedColor = index
+                    onColorSelected(colorInt)
+                },
                 size = 28.dp
             )
         }
@@ -181,45 +206,52 @@ fun SubPanelSubrayarTachar() {
 }
 
 @Composable
-fun SubPanelDibujo() {
-    var selectedThickness by remember { mutableStateOf(0) }
+fun SubPanelDibujo(
+    onColorSelected: (Int) -> Unit,
+    onThicknessSelected: (Float) -> Unit
+) {
+    var selectedThickness by remember { mutableStateOf(1) }
     var selectedColor by remember { mutableStateOf(0) }
     val context = LocalContext.current
     
     val colors = listOf(
-        Color.Black, Color.White, Color.Red, Color.Blue, 
-        Color.Green, Color.Yellow, Color(0xFFFFA500), Color(0xFF800080)
+        0xFF000000.toInt(), // Negro
+        0xFFFFFFFF.toInt(), // Blanco
+        0xFFEF4444.toInt(), // Rojo
+        0xFF3B82F6.toInt(), // Azul
+        0xFF22C55E.toInt(), // Verde
+        0xFFFFE066.toInt(), // Amarillo
+        0xFFFFA500.toInt(), // Naranja
+        0xFF800080.toInt()  // Púrpura
     )
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Grosor:", style = MaterialTheme.typography.labelMedium)
-            listOf(2, 4, 7).forEachIndexed { index, thickness ->
+            listOf(2f, 4f, 7f).forEachIndexed { index, thickness ->
                 ThicknessButton(
                     thickness = thickness,
                     isSelected = selectedThickness == index,
-                    onClick = { selectedThickness = index }
+                    onClick = { 
+                        selectedThickness = index
+                        onThicknessSelected(thickness)
+                    }
                 )
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Color:", style = MaterialTheme.typography.labelMedium)
-            colors.forEachIndexed { index, color ->
+            colors.forEachIndexed { index, colorInt ->
                 ColorCircle(
-                    color = color,
+                    color = Color(colorInt),
                     isSelected = selectedColor == index,
-                    onClick = { selectedColor = index },
+                    onClick = { 
+                        selectedColor = index
+                        onColorSelected(colorInt)
+                    },
                     size = 24.dp
                 )
             }
-            // Círculo gradiente
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(Brush.sweepGradient(listOf(Color.Red, Color.Yellow, Color.Green, Color.Blue, Color.Magenta, Color.Red)))
-                    .clickable { Toast.makeText(context, "Selector de color", Toast.LENGTH_SHORT).show() }
-            )
         }
     }
 }
@@ -243,25 +275,57 @@ fun SubPanelTextoNota(message: String) {
 }
 
 @Composable
-fun SubPanelFormas() {
+fun SubPanelFormas(
+    onShapeSelected: (ShapeType) -> Unit,
+    onColorSelected: (Int) -> Unit
+) {
     var selectedShape by remember { mutableStateOf(1) } // Rectángulo por defecto
+    var selectedColor by remember { mutableStateOf(0) }
+    
     val shapes = listOf(
-        Icons.Default.ArrowForward,
-        Icons.Default.Rectangle,
-        Icons.Default.Circle,
-        Icons.Default.HorizontalRule
+        Icons.Default.ArrowForward to ShapeType.FLECHA,
+        Icons.Default.Rectangle to ShapeType.RECTANGULO,
+        Icons.Default.Circle to ShapeType.CIRCULO,
+        Icons.Default.HorizontalRule to ShapeType.LINEA
+    )
+    
+    val colors = listOf(
+        0xFF1E293B.toInt(), // Negro
+        0xFFEF4444.toInt(), // Rojo
+        0xFF3B82F6.toInt(), // Azul
+        0xFF22C55E.toInt()  // Verde
     )
 
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        shapes.forEachIndexed { index, icon ->
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        shapes.forEachIndexed { index, (icon, shapeType) ->
             IconButton(
-                onClick = { selectedShape = index },
+                onClick = { 
+                    selectedShape = index
+                    onShapeSelected(shapeType)
+                },
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .background(if (selectedShape == index) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent)
             ) {
                 Icon(icon, contentDescription = null, tint = if (selectedShape == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
             }
+        }
+        
+        Text("Color:", style = MaterialTheme.typography.labelMedium)
+        
+        colors.forEachIndexed { index, colorInt ->
+            ColorCircle(
+                color = Color(colorInt),
+                isSelected = selectedColor == index,
+                onClick = { 
+                    selectedColor = index
+                    onColorSelected(colorInt)
+                },
+                size = 24.dp
+            )
         }
     }
 }
@@ -292,7 +356,7 @@ fun ColorCircle(color: Color, isSelected: Boolean, onClick: () -> Unit, size: an
 }
 
 @Composable
-fun ThicknessButton(thickness: Int, isSelected: Boolean, onClick: () -> Unit) {
+fun ThicknessButton(thickness: Float, isSelected: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(48.dp, 32.dp)
@@ -314,3 +378,15 @@ fun ThicknessButton(thickness: Int, isSelected: Boolean, onClick: () -> Unit) {
         )
     }
 }
+
+/**
+ * Callbacks para las acciones de formato de texto.
+ */
+data class FormatCallbacks(
+    val onFuenteSelected: (String) -> Unit,
+    val onTamanioSelected: (Float) -> Unit,
+    val onNegritaChanged: (Boolean) -> Unit,
+    val onCursivaChanged: (Boolean) -> Unit,
+    val onColorSelected: (Color) -> Unit,
+    val onAlineacionSelected: (String) -> Unit
+)

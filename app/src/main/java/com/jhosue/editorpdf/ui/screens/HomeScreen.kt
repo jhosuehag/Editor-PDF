@@ -1,6 +1,9 @@
 package com.jhosue.editorpdf.ui.screens
 
+import android.content.Intent
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -25,30 +28,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.navigationBarsPadding
+import com.jhosue.editorpdf.data.db.RecentPdfEntity
+import com.jhosue.editorpdf.repository.RecentPdfRepository
 import com.jhosue.editorpdf.ui.navigation.Routes
-
-/**
- * Modelo de datos mock para los items de PDF
- */
-data class PdfItemMock(
-    val nombre: String,
-    val fecha: String,
-    val tamano: String
-)
-
-/**
- * Objeto con los datos mock solicitados
- */
-object HomeScreenMock {
-    val pdfs = listOf(
-        PdfItemMock("Contrato_empresa.pdf", "Hoy, 10:32", "2.4 MB"),
-        PdfItemMock("Informe_mensual.pdf", "Ayer, 18:15", "5.1 MB"),
-        PdfItemMock("CV_actualizado.pdf", "20 mar", "890 KB"),
-        PdfItemMock("Manual_usuario.pdf", "15 mar", "12.3 MB"),
-        PdfItemMock("Presupuesto_2025.pdf", "10 mar", "1.7 MB"),
-        PdfItemMock("Acta_reunion.pdf", "5 mar", "430 KB")
-    )
-}
 
 /**
  * Pantalla Principal (HOME) de PDFix
@@ -60,8 +43,33 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     var selectedTab by remember { mutableStateOf(0) }
-    var isLoading by remember { mutableStateOf(true) } // Seteado a true para demostración del Shimmer
-    val pdfs = HomeScreenMock.pdfs
+    val recentPdfRepository = remember { RecentPdfRepository(context) }
+    val pdfs by recentPdfRepository.obtenerRecientes().collectAsState(initial = emptyList())
+
+    // Launcher para seleccionar un PDF
+    val pdfPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            // Intentar tomar permiso persistente de lectura sobre la URI del PDF.
+            // Algunos pickers no otorgan permisos persistables, así que envolvente
+            // en try/catch para evitar crash si falla.
+            try {
+                val flag = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                context.contentResolver.takePersistableUriPermission(it, flag)
+            } catch (e: SecurityException) {
+                // El picker no otorga permiso persistable, se usa el transitorio de la sesión
+                android.util.Log.w("HomeScreen", "No se pudo obtener permiso persistable: ${e.message}")
+            } catch (e: IllegalArgumentException) {
+                // URI no soportada para permisos persistentes
+                android.util.Log.w("HomeScreen", "URI no soportada para permisos persistentes: ${e.message}")
+            }
+
+            // Navegar al editor con la URI del PDF
+            val route = Routes.editorRoute(it)
+            onNavigate(route)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -84,6 +92,7 @@ fun HomeScreen(
         },
         bottomBar = {
             NavigationBar(
+                modifier = Modifier.navigationBarsPadding(),
                 containerColor = MaterialTheme.colorScheme.surface
             ) {
                 NavigationBarItem(
@@ -108,7 +117,7 @@ fun HomeScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { Toast.makeText(context, "Selecciona un PDF", Toast.LENGTH_SHORT).show() },
+                onClick = { pdfPickerLauncher.launch("application/pdf") },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = CircleShape
@@ -142,15 +151,24 @@ fun HomeScreen(
                 }
 
                 // SECCIÓN: Recientes (Items)
-                if (isLoading) {
-                    items(3) {
-                        com.jhosue.editorpdf.ui.components.ShimmerPdfItem()
+                if (pdfs.isEmpty()) {
+                    item {
+                        Text(
+                            text = "Sin archivos recientes. ¡Importa un PDF para comenzar!",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(vertical = 16.dp)
+                        )
                     }
                 } else {
                     items(pdfs) { pdf ->
                         RecentPdfCard(
                             pdf = pdf,
-                            onClick = { onNavigate(Routes.EDITOR) },
+                            onClick = { 
+                                val uri = android.net.Uri.parse(pdf.uriString)
+                                val route = Routes.editorRoute(uri)
+                                onNavigate(route)
+                            },
                             onMenuClick = { Toast.makeText(context, "Menú de ${pdf.nombre}", Toast.LENGTH_SHORT).show() }
                         )
                     }
@@ -234,7 +252,7 @@ fun QuickAccessCard(
  */
 @Composable
 fun RecentPdfCard(
-    pdf: PdfItemMock,
+    pdf: RecentPdfEntity,
     onClick: () -> Unit,
     onMenuClick: () -> Unit
 ) {
@@ -278,7 +296,7 @@ fun RecentPdfCard(
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    text = "${pdf.fecha} · ${pdf.tamano}",
+                    text = formatearFecha(pdf.fechaApertura),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
@@ -292,6 +310,25 @@ fun RecentPdfCard(
                     tint = MaterialTheme.colorScheme.onSurface
                 )
             }
+        }
+    }
+}
+
+/**
+ * Formatea un timestamp en milliseconds a una fecha legible.
+ */
+private fun formatearFecha(timestamp: Long): String {
+    val ahora = System.currentTimeMillis()
+    val diff = ahora - timestamp
+    val unDia = 24 * 60 * 60 * 1000L
+    
+    return when {
+        diff < unDia -> "Hoy"
+        diff < 2 * unDia -> "Ayer"
+        diff < 7 * unDia -> "Hace ${(diff / unDia).toInt()} días"
+        else -> {
+            val fecha = java.util.Date(timestamp)
+            java.text.SimpleDateFormat("dd MMM", java.util.Locale.getDefault()).format(fecha)
         }
     }
 }

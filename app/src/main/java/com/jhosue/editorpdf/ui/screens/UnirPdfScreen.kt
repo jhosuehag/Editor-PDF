@@ -1,23 +1,31 @@
 package com.jhosue.editorpdf.ui.screens
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.jhosue.editorpdf.ui.components.PantallaProgreso
+import com.jhosue.editorpdf.viewmodel.UnirPdfEstado
+import com.jhosue.editorpdf.viewmodel.UnirPdfViewModel
 
 /**
  * Pantalla para unir múltiples archivos PDF en uno solo.
@@ -25,14 +33,75 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UnirPdfScreen(
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    viewModel: UnirPdfViewModel = viewModel()
 ) {
     val context = LocalContext.current
-    val archivosMock = remember {
-        mutableStateListOf(
-            "Contrato_parte1.pdf",
-            "Contrato_parte2.pdf",
-            "Anexos.pdf"
+    val estado by viewModel.estado.collectAsState()
+    val archivosSeleccionados by viewModel.archivosSeleccionados.collectAsState()
+    val nombresArchivos by viewModel.nombresArchivos.collectAsState()
+
+    var nombreDestino by remember { mutableStateOf("documento_unido") }
+    var showDialogoNombre by remember { mutableStateOf(false) }
+
+    // Lanzador para seleccionar múltiples archivos PDF
+    val launcherPdf = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            viewModel.agregarArchivos(uris)
+        }
+    }
+
+    // Mostrar Toast según estado
+    LaunchedEffect(estado) {
+        when (estado) {
+            is UnirPdfEstado.Exito -> {
+                Toast.makeText(context, "PDF creado exitosamente", Toast.LENGTH_LONG).show()
+            }
+            is UnirPdfEstado.Error -> {
+                Toast.makeText(context, (estado as UnirPdfEstado.Error).mensaje, Toast.LENGTH_LONG).show()
+            }
+            else -> {}
+        }
+    }
+
+    // Diálogo para nombre del archivo
+    if (showDialogoNombre) {
+        AlertDialog(
+            onDismissRequest = { showDialogoNombre = false },
+            title = { Text("Nombre del archivo") },
+            text = {
+                OutlinedTextField(
+                    value = nombreDestino,
+                    onValueChange = { nombreDestino = it },
+                    label = { Text("Nombre") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    showDialogoNombre = false
+                    viewModel.unirPdfs(nombreDestino)
+                }) {
+                    Text("Crear")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDialogoNombre = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // Pantalla de progreso
+    if (estado is UnirPdfEstado.Procesando) {
+        val estadoProceso = estado as UnirPdfEstado.Procesando
+        PantallaProgreso(
+            progreso = estadoProceso.progreso,
+            onCancel = { viewModel.resetearEstado() }
         )
     }
 
@@ -44,6 +113,13 @@ fun UnirPdfScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás")
                     }
+                },
+                actions = {
+                    if (archivosSeleccionados.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.limpiarArchivos() }) {
+                            Icon(Icons.Default.Close, contentDescription = "Limpiar todo")
+                        }
+                    }
                 }
             )
         }
@@ -54,7 +130,7 @@ fun UnirPdfScreen(
                 .padding(padding)
         ) {
             Text(
-                text = "Archivos a unir (${archivosMock.size})",
+                text = "Archivos a unir (${archivosSeleccionados.size})",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(16.dp)
             )
@@ -66,7 +142,7 @@ fun UnirPdfScreen(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (archivosMock.isEmpty()) {
+                if (archivosSeleccionados.isEmpty()) {
                     item {
                         Box(
                             modifier = Modifier
@@ -82,7 +158,7 @@ fun UnirPdfScreen(
                         }
                     }
                 } else {
-                    items(archivosMock) { nombre ->
+                    itemsIndexed(nombresArchivos) { indice, nombre ->
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(8.dp),
@@ -94,8 +170,8 @@ fun UnirPdfScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    Icons.Default.PictureAsPdf, 
-                                    contentDescription = null, 
+                                    Icons.Default.PictureAsPdf,
+                                    contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(24.dp)
                                 )
@@ -104,16 +180,25 @@ fun UnirPdfScreen(
                                     style = MaterialTheme.typography.bodyMedium,
                                     modifier = Modifier
                                         .weight(1f)
-                                        .padding(start = 8.dp)
+                                        .padding(start = 8.dp),
+                                    maxLines = 1
                                 )
-                                Icon(
-                                    Icons.Default.DragHandle, 
-                                    contentDescription = "Reordenar",
-                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                                    modifier = Modifier.padding(end = 4.dp).size(20.dp)
+                                Text(
+                                    text = "${indice + 1}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                    modifier = Modifier.padding(end = 8.dp)
                                 )
-                                IconButton(onClick = { archivosMock.remove(nombre) }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Eliminar", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                                IconButton(
+                                    onClick = { viewModel.eliminarArchivo(indice) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Eliminar",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
                             }
                         }
@@ -122,24 +207,41 @@ fun UnirPdfScreen(
             }
 
             OutlinedButton(
-                onClick = { Toast.makeText(context, "Seleccionar PDF", Toast.LENGTH_SHORT).show() },
+                onClick = { launcherPdf.launch(arrayOf("application/pdf")) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                Text("+ Agregar archivos")
+                Text("+ Agregar archivos PDF")
             }
 
             Button(
-                onClick = { Toast.makeText(context, "Uniendo PDFs...", Toast.LENGTH_SHORT).show() },
+                onClick = {
+                    if (archivosSeleccionados.size < 2) {
+                        Toast.makeText(context, "Se necesitan al menos 2 archivos", Toast.LENGTH_SHORT).show()
+                    } else {
+                        showDialogoNombre = true
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
                     .height(52.dp),
-                shape = RoundedCornerShape(10.dp)
+                shape = RoundedCornerShape(10.dp),
+                enabled = archivosSeleccionados.size >= 2 && estado !is UnirPdfEstado.Procesando
             ) {
                 Text("Unir y guardar →")
             }
+        }
+    }
+
+    // Botón para abrir PDF resultante si hubo éxito
+    if (estado is UnirPdfEstado.Exito) {
+        val estadoExito = estado as UnirPdfEstado.Exito
+        LaunchedEffect(Unit) {
+            // Mostrar diálogo ofreciendo abrir
+            Toast.makeText(context, "Guardado en: ${estadoExito.rutaArchivo}", Toast.LENGTH_LONG).show()
+            viewModel.resetearEstado()
         }
     }
 }

@@ -36,7 +36,8 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun PanelEditar(
     isActive: Boolean,
-    onActiveChange: (Boolean) -> Unit
+    onActiveChange: (Boolean) -> Unit,
+    formatCallbacks: FormatCallbacks? = null
 ) {
     var herramientaActiva by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
@@ -82,7 +83,7 @@ fun PanelEditar(
                     )
                     EditToolButton(
                         label = "Reemplazar",
-                        icon = Icons.Default.Image, // Combinado con flechas visualmente
+                        icon = Icons.Default.Image,
                         isSelected = herramientaActiva == "REEMPLAZAR_IMG",
                         onClick = { herramientaActiva = "REEMPLAZAR_IMG" }
                     )
@@ -128,9 +129,9 @@ fun PanelEditar(
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                     ) {
                         when (herramientaActiva) {
-                            "TEXTO" -> SubPanelTexto()
+                            "TEXTO" -> SubPanelTexto(formatCallbacks)
                             "REEMPLAZAR_IMG" -> SubPanelReemplazarImg()
-                            "INSERTAR_IMG" -> SubPanelInsertarImg()
+                            "INSERTAR_IMG" -> SubPanelInsertarImg(formatCallbacks)
                         }
                     }
                 }
@@ -157,10 +158,14 @@ fun EditToolButton(label: String, icon: ImageVector, isSelected: Boolean, onClic
 }
 
 @Composable
-fun SubPanelTexto() {
+fun SubPanelTexto(formatCallbacks: FormatCallbacks?) {
     var expanded by remember { mutableStateOf(false) }
-    var fontSelected by remember { mutableStateOf("Inter") }
-    var sizeSelected by remember { mutableStateOf("14") }
+    var fontSelected by remember { mutableStateOf("Helvetica") }
+    var sizeSelected by remember { mutableStateOf("12") }
+    var isBold by remember { mutableStateOf(false) }
+    var isItalic by remember { mutableStateOf(false) }
+    var selectedColor by remember { mutableStateOf(Color.Black) }
+    var selectedAlineacion by remember { mutableStateOf("LEFT") }
 
     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         // Fila A — Fuente y tamaño
@@ -176,10 +181,14 @@ fun SubPanelTexto() {
                     Text(fontSelected, style = MaterialTheme.typography.bodyMedium)
                 }
                 DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    listOf("Inter", "Roboto", "Times New Roman", "Courier New").forEach { font ->
+                    listOf("Helvetica", "Times", "Courier").forEach { font ->
                         DropdownMenuItem(
                             text = { Text(font, style = MaterialTheme.typography.bodyMedium) },
-                            onClick = { fontSelected = font; expanded = false }
+                            onClick = { 
+                                fontSelected = font
+                                formatCallbacks?.onFuenteSelected(font)
+                                expanded = false 
+                            }
                         )
                     }
                 }
@@ -189,25 +198,63 @@ fun SubPanelTexto() {
             Spacer(modifier = Modifier.width(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf("10", "12", "14", "16", "18").forEach { size ->
-                    SizeChip(size = size, isSelected = sizeSelected == size, onClick = { sizeSelected = size })
+                    SizeChip(
+                        size = size, 
+                        isSelected = sizeSelected == size, 
+                        onClick = { 
+                            sizeSelected = size
+                            formatCallbacks?.onTamanioSelected(size.toFloat())
+                        }
+                    )
                 }
             }
         }
 
-        // Fila B — Estilo
+        // Fila B — Estilo (Negrita y Cursiva)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StyleIconButton(icon = Icons.Default.FormatBold, isSelected = false)
-            StyleIconButton(icon = Icons.Default.FormatItalic, isSelected = false)
-            StyleIconButton(icon = Icons.Default.FormatUnderlined, isSelected = false)
-            StyleIconButton(icon = Icons.Default.FormatStrikethrough, isSelected = false)
+            StyleIconButton(
+                icon = Icons.Default.FormatBold, 
+                isSelected = isBold,
+                onClick = { 
+                    isBold = !isBold
+                    formatCallbacks?.onNegritaChanged(isBold)
+                }
+            )
+            StyleIconButton(
+                icon = Icons.Default.FormatItalic, 
+                isSelected = isItalic,
+                onClick = { 
+                    isItalic = !isItalic
+                    formatCallbacks?.onCursivaChanged(isItalic)
+                }
+            )
         }
 
         // Fila C — Alineación y color
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // Alineación
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Icon(Icons.Default.FormatAlignLeft, contentDescription = null, modifier = Modifier.size(24.dp))
-                Icon(Icons.Default.FormatAlignCenter, contentDescription = null, modifier = Modifier.size(24.dp))
-                Icon(Icons.Default.FormatAlignRight, contentDescription = null, modifier = Modifier.size(24.dp))
+                Icon(Icons.Default.FormatAlignLeft, contentDescription = null, 
+                    modifier = Modifier.size(24.dp).clickable { 
+                        selectedAlineacion = "LEFT"
+                        formatCallbacks?.onAlineacionSelected("LEFT")
+                    },
+                    tint = if (selectedAlineacion == "LEFT") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+                Icon(Icons.Default.FormatAlignCenter, contentDescription = null,
+                    modifier = Modifier.size(24.dp).clickable { 
+                        selectedAlineacion = "CENTER"
+                        formatCallbacks?.onAlineacionSelected("CENTER")
+                    },
+                    tint = if (selectedAlineacion == "CENTER") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+                Icon(Icons.Default.FormatAlignRight, contentDescription = null,
+                    modifier = Modifier.size(24.dp).clickable { 
+                        selectedAlineacion = "RIGHT"
+                        formatCallbacks?.onAlineacionSelected("RIGHT")
+                    },
+                    tint = if (selectedAlineacion == "RIGHT") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
             }
             Spacer(modifier = Modifier.weight(1f))
             Text("Color:", style = MaterialTheme.typography.labelSmall)
@@ -219,7 +266,14 @@ fun SubPanelTexto() {
                         .size(18.dp)
                         .clip(CircleShape)
                         .background(color)
-                        .clickable { }
+                        .clickable { 
+                            selectedColor = color
+                            formatCallbacks?.onColorSelected(color)
+                        }
+                        .then(
+                            if (selectedColor == color) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                            else Modifier
+                        )
                 )
             }
         }
@@ -240,7 +294,7 @@ fun SubPanelReemplazarImg() {
 }
 
 @Composable
-fun SubPanelInsertarImg() {
+fun SubPanelInsertarImg(formatCallbacks: FormatCallbacks?) {
     val context = LocalContext.current
     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Galería (mock)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
@@ -279,9 +333,9 @@ fun SizeChip(size: String, isSelected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-fun StyleIconButton(icon: ImageVector, isSelected: Boolean) {
+fun StyleIconButton(icon: ImageVector, isSelected: Boolean, onClick: () -> Unit) {
     IconButton(
-        onClick = { },
+        onClick = onClick,
         modifier = Modifier
             .size(44.dp)
             .clip(RoundedCornerShape(4.dp))
